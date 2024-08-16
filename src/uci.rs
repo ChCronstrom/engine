@@ -32,6 +32,8 @@ impl<'a> UciClient<'a>
             {
                 match command
                 {
+                    "uci" => self.command_uci()?,
+
                     "quit" => {
                         return Ok(());
                     }
@@ -41,5 +43,14 @@ impl<'a> UciClient<'a>
                 }
             }
         }
+    }
+
+    fn command_uci(&mut self) -> io::Result<()>
+    {
+        writeln!(self.stdout, "id name Christoffer Engine 1.0")?;
+        writeln!(self.stdout, "id author Christoffer Cronström")?;
+        writeln!(self.stdout, "uciok")?;
+
+        Ok(())
     }
 }
