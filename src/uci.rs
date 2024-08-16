@@ -1,29 +1,32 @@
 use std::io;
-use std::io::{BufRead, Write};
+use std::io::BufRead;
 
-pub struct UciClient<'a>
+pub struct UciClient
 {
-    stdin: io::StdinLock<'a>,
-    stdout: io::StdoutLock<'a>,
+    stdin: io::StdinLock<'static>,
 }
 
-impl<'a> UciClient<'a>
+impl UciClient
 {
-    pub fn new(stdin: io::StdinLock<'a>, stdout: io::StdoutLock<'a>) -> UciClient<'a>
+    pub fn new() -> UciClient
     {
-        UciClient { stdin, stdout }
+        UciClient { stdin: io::stdin().lock() }
     }
 
-    pub fn main_loop(&mut self) -> io::Result<()>
+    pub fn main_loop(&mut self)
     {
         let mut input = String::new();
         loop
         {
             input.clear();
-            self.stdin.read_line(&mut input)?;
+            if let Err(e) = self.stdin.read_line(&mut input)
+            {
+                println!("ERROR: IO error {e}");
+                return;
+            }
             if input.len() == 0 {
                 // EOF on input, exit
-                return Ok(());
+                return;
             }
 
             let mut command_words = input.split_ascii_whitespace();
@@ -32,25 +35,23 @@ impl<'a> UciClient<'a>
             {
                 match command
                 {
-                    "uci" => self.command_uci()?,
+                    "uci" => self.command_uci(),
 
                     "quit" => {
-                        return Ok(());
+                        return;
                     }
                     _ => {
-                        writeln!(self.stdout, "Unknown command: {command}")?;
+                        println!("Unknown command: {command}");
                     }
                 }
             }
         }
     }
 
-    fn command_uci(&mut self) -> io::Result<()>
+    fn command_uci(&mut self)
     {
-        writeln!(self.stdout, "id name Christoffer Engine 1.0")?;
-        writeln!(self.stdout, "id author Christoffer Cronström")?;
-        writeln!(self.stdout, "uciok")?;
-
-        Ok(())
+        println!("id name Christoffer Engine 1.0");
+        println!("id author Christoffer Cronström");
+        println!("uciok");
     }
 }
