@@ -2,6 +2,8 @@ use std::io;
 use std::io::BufRead;
 use std::str::{FromStr, SplitAsciiWhitespace};
 
+use crate::search;
+
 pub struct UciClient
 {
     stdin: io::StdinLock<'static>,
@@ -43,6 +45,8 @@ impl UciClient
                     "uci" => self.command_uci(),
                     "position" => self.command_position(command_words),
                     "d" => self.command_d(),
+
+                    "go" => self.command_go(),
 
                     "quit" => {
                         return;
@@ -207,6 +211,13 @@ impl UciClient
 
 
         print!("{}", display_str);
+    }
+
+    fn command_go(&self)
+    {
+        let depth = 3;
+        let score = search::minimax_search(depth, &self.position, search::BoardScore::WORST_SCORE, search::BoardScore::BEST_SCORE);
+        println!("info depth {depth} score {score}");
     }
 
 }
