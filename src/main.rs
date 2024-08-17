@@ -1,3 +1,5 @@
+#![feature(str_split_whitespace_remainder)]
+
 mod uci;
 
 fn main()
