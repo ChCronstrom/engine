@@ -1,5 +1,6 @@
 #![feature(str_split_whitespace_remainder)]
 
+mod evaluation;
 mod uci;
 mod score;
 mod search;

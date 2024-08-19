@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use chess::{Board, BoardStatus, ChessMove, MoveGen};
+use crate::evaluation::evaluation;
 use crate::score::BoardScore;
 
 /*
@@ -101,7 +102,7 @@ impl Searcher
                     best_score
                     
                 } else {
-                    BoardScore::EVEN
+                    evaluation(position)
                 }
             }
         }
