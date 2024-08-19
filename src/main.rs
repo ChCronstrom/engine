@@ -1,6 +1,7 @@
 #![feature(str_split_whitespace_remainder)]
 
 mod uci;
+mod score;
 mod search;
 
 fn main()

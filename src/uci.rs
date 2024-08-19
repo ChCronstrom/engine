@@ -1,5 +1,6 @@
 use std::io;
 use std::io::BufRead;
+use std::fmt::Write;
 use std::str::{FromStr, SplitAsciiWhitespace};
 
 use crate::search;
@@ -123,7 +124,7 @@ impl UciClient
 
                     // Test if move is legal
                     let mut legal_move_found = false;
-                    let movegen = chess::MoveGen::new_legal(&self.position);
+                    let movegen = chess::MoveGen::new_legal(&result_position);
                     for legal_move in movegen {
                         if next_move == legal_move {
                             legal_move_found = true;
@@ -215,9 +216,26 @@ impl UciClient
 
     fn command_go(&self)
     {
+        let mut searcher = search::Searcher::new();
         let depth = 3;
-        let score = search::minimax_search(depth, &self.position, search::BoardScore::WORST_SCORE, search::BoardScore::BEST_SCORE);
-        println!("info depth {depth} score {score}");
+        let score = searcher.alphabeta_search(depth, &self.position, crate::score::BoardScore::WORST_SCORE, crate::score::BoardScore::BEST_SCORE);
+        let hashmap = searcher.hashmap();
+        println!("info hashfull {}", hashmap.len());
+        let mut pv = String::new();
+        let mut position = self.position;
+        loop {
+            let entry = hashmap.get(&position);
+            if let Some(entry) = entry
+            {
+                write!(pv, " {}", entry.best_move).expect("string write always succeeds");
+                position = position.make_move_new(entry.best_move)
+            }
+            else
+            {
+                break
+            }
+        }
+        println!("info depth {depth} score {score} pv{pv}");
     }
 
 }
