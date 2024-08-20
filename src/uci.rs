@@ -227,8 +227,15 @@ impl UciClient
             let entry = hashmap.get(&position);
             if let Some(entry) = entry
             {
-                write!(pv, " {}", entry.best_move).expect("string write always succeeds");
-                position = position.make_move_new(entry.best_move)
+                if let Some(best_move) = entry.best_move
+                {
+                    write!(pv, " {}", best_move).expect("string write always succeeds");
+                    position = position.make_move_new(best_move)
+                }
+                else
+                {
+                    break
+                }
             }
             else
             {

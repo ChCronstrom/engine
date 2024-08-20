@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use chess::{Board, BoardStatus, ChessMove, MoveGen};
-use crate::evaluation::evaluation;
-use crate::score::BoardScore;
+use chess::{Board, ChessMove, MoveGen};
+use crate::evaluation;
+use crate::score::{BoardScore, BoundedScore};
 
 /*
  * Optimal hash entry:
@@ -18,24 +18,29 @@ use crate::score::BoardScore;
  *          3 bits promotion (-, N, B, R, Q)
  *          1 bit Some/None)
  * 1 byte: is score exact, lower bound, or upper bound (later also quiescent, etc)
- * 1 byte spare
+ * 1 byte spare (or used for "generation" counter?)
  * 16 bytes total, 8 byte alignment
  */
+#[derive(Clone, Copy)]
 pub struct HashEntry
 {
     pub hash: u64,
-    pub best_move: ChessMove,
-    pub score: BoardScore,
+    pub best_move: Option<ChessMove>,
+    pub score: BoundedScore,
     pub depth: u8,
-    pub node_type: NodeType,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum NodeType
+impl HashEntry
 {
-    Exact,
-    LowerBound,
-    UpperBound,
+    pub fn new() -> Self
+    {
+        HashEntry {
+            hash: 0,
+            best_move: None,
+            score: BoundedScore::Exact(BoardScore::NO_SCORE),
+            depth: 0,
+        }
+    }
 }
 
 pub struct Searcher
@@ -53,59 +58,137 @@ impl Searcher
         }
     }
 
-    pub fn alphabeta_search(&mut self, depth: usize, position: &Board, mut alpha: BoardScore, beta: BoardScore) -> BoardScore
+    /// Calculate the score for a position with alpha-beta search
+    ///
+    /// If the score is higher than `beta`, it may not calculate the exact score, but instead provide
+    /// a `BoundedScore::LowerBound` of at least `beta`. Similarly, if the score is lower than `alpha`
+    /// it may instead calculate a `BoundedScore::UpperBound` of at most `alpha`.
+    pub fn alphabeta_search(&mut self, depth: usize, position: &Board, mut alpha: BoardScore, beta: BoardScore) -> BoundedScore
     {
-        // TODO: Optimization: position.status() internally enumerates all legal moves to determine
-        // stalemate and checkmate, and then throws away this information. Later we enumerate the
-        // moves again to iterate over them. This should ideally only be done once.
-        match position.status()
+        use BoundedScore::*;
+
+        // First, look up in hash table to see if this node has been searched already...
+        if let Some(hash_entry) = self.hashmap.get(position)
         {
-            BoardStatus::Checkmate => {
-                // println!("info string Checkmate found. depth = {depth}, fen = {position}");
-                BoardScore::MATED
-            }
-            BoardStatus::Stalemate => BoardScore::EVEN,
-            BoardStatus::Ongoing => {
-                if depth > 0 {
-                    let legal_moves = MoveGen::new_legal(position);
-                    let mut best_score = BoardScore::WORST_SCORE;
-                    let mut best_move = ChessMove::default();
-                    // TODO: Use better move ordering, e.g. test the best move first, then
-                    // all captures, and then the remaining moves.
-                    for next_move in legal_moves
-                    {
-                        let new_position = position.make_move_new(next_move);
-                        // println!("Trying move {next_move} {{");
-                        let search_score = -self.alphabeta_search(depth - 1, &new_position, -beta, -alpha);
-                        if search_score > best_score {
-                            // println!("New best move {next_move} with score {search_score}");
-                            best_score = search_score;
-                            best_move = next_move;
-                            if search_score > alpha {
-                                alpha = search_score;
-                            }
-                        }
-                        // println!("}}")
-                        if search_score >= beta {
-                            break;
-                        }
-                    }
-                    best_score = best_score.increment_mate_plies();
-                    // println!("info string returning {best_score} at depth = {depth}");
-                    self.hashmap.insert(*position, HashEntry { 
-                        hash: position.get_hash(),
-                        best_move,
-                        score: best_score,
-                        depth: depth as u8,
-                        node_type: NodeType::Exact,
-                    });
-                    best_score
-                    
-                } else {
-                    evaluation(position)
+            // ... and to sufficient depth.
+            if hash_entry.depth as usize >= depth
+            {
+                // If the previous score is compatible with our alpha-beta bounds, we can return it.
+                match hash_entry.score
+                {
+                    Exact(s) => return Exact(s),
+                    LowerBound(s) if s >= beta => return LowerBound(s),
+                    UpperBound(s) if s <= alpha => return UpperBound(s),
+                    _ => { },
                 }
             }
+            // TODO: Even if the score is not compatible, we can use the previous information in our current search.
         }
+
+        if depth > 0
+        {
+            let legal_moves = MoveGen::new_legal(position);
+            let mut best_score = Exact(BoardScore::NO_SCORE);
+            let mut best_move = None;
+
+            // TODO: Use better move ordering, e.g. test the best move first, then
+            // all captures, and then the remaining moves.
+            for next_move in legal_moves
+            {
+                let new_position = position.make_move_new(next_move);
+                // println!("Trying move {next_move} {{");
+                let search_score = -self.alphabeta_search(depth - 1, &new_position, -beta, -alpha);
+
+                if search_score.unwrap() > best_score.unwrap() {
+                    // println!("New best move {next_move} with score {search_score}");
+                    best_score = search_score;
+                    best_move = Some(next_move);
+                    if search_score.unwrap() > alpha
+                    {
+                        // Found a move better than alpha, so update alpha.
+                        alpha = search_score.unwrap();
+
+                        // I have a hunch that this will be true
+                        debug_assert!(search_score.is_exact());
+                    }
+                }
+                // println!("}}")
+                if best_score.unwrap() >= beta {
+                    // If we found a move better than beta, we don't need to consider any other moves.
+                    // This particular position is "too good" for us, and will therefore never be played
+                    // by a minmaxing opponent anyway, so further search can be pruned. This score is
+                    // now a LowerBound score: there could be even higher scores in the other moves.
+                    debug_assert!(best_score.is_exact()); // TODO: Is this correct?
+                    // println!("beta bailing: {best_score:?} > {beta:?}");
+                    best_score = LowerBound(best_score.unwrap());
+                    break;
+                }
+            }
+
+            if best_move.is_none()
+            {
+                // There were no legal moves!
+                // This means checkmate or stalemate
+                if *position.checkers() != chess::EMPTY
+                {
+                    best_score = Exact(BoardScore::MATED);
+                }
+                else
+                {
+                    best_score = Exact(BoardScore::EVEN);
+                }
+
+                // TODO: This evaluation is valid for any depth for purposes of hashtable lookup.
+                //depth = 255;
+            }
+            else
+            {
+                // Increase mate distance, e.g. "mate in 4" becomes "mate in 5" since we are one step
+                // above in the tree. Does nothing for centipawn evaluations.
+                best_score = best_score.increment_mate_plies();
+            }
+
+            // println!("info string returning {best_score} at depth = {depth}");
+            self.hashmap.insert(*position, HashEntry {
+                hash: position.get_hash(),
+                best_move,
+                score: best_score,
+                depth: depth as u8,
+            });
+            best_score
+        }
+        else
+        {
+            // Depth is zero, use leaf evaluation
+            Exact(self.leaf_evaluation(position, alpha, beta))
+        }
+    }
+
+    fn leaf_evaluation(&self, position: &Board, _alpha: BoardScore, _beta: BoardScore) -> BoardScore
+    {
+        // TODO: Quiescent search should go here
+        let legal_moves = MoveGen::new_legal(position);
+        if legal_moves.len() > 0
+        {
+            self.static_evaluation(position)
+        }
+        else
+        {
+            // This means checkmate or stalemate
+            if *position.checkers() != chess::EMPTY
+            {
+                BoardScore::MATED
+            }
+            else
+            {
+                BoardScore::EVEN
+            }
+        }
+    }
+
+    fn static_evaluation(&self, position: &Board) -> BoardScore
+    {
+        evaluation::evaluate_always_zero(position)
     }
 
     pub fn hashmap(&self) -> &HashMap<Board, HashEntry>

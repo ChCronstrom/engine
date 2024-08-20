@@ -1,17 +1,12 @@
 use chess::{Board, Color, Piece};
 use crate::score::BoardScore;
 
-pub fn evaluation(board: &Board) -> BoardScore
-{
-    evaluate_always_zero(board)
-}
-
-fn evaluate_always_zero(_: &Board) -> BoardScore
+pub fn evaluate_always_zero(_: &Board) -> BoardScore
 {
     BoardScore::EVEN
 }
 
-fn evaluate_piece_values(board: &Board) -> BoardScore
+pub fn evaluate_piece_values(board: &Board) -> BoardScore
 {
     let mut evaluation = 0;
 
