@@ -1,0 +1,2 @@
+position fen 4kb1r/p2n1ppp/4q3/4p1B1/4P3/1Q6/PPP2PPP/2KR4 w k - 1 0
+info depth 3 score mate 2 pv b3b8 d7b8 d1d8
