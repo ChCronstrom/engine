@@ -89,6 +89,7 @@ impl Searcher
         // Second, look up in hash table to see if this node has been searched already...
         if let Some(hash_entry) = self.hashmap.get(position)
         {
+            debug_assert!(hash_entry.hash == position.get_hash());
             // ... and to sufficient depth.
             if hash_entry.depth as usize >= depth
             {
@@ -106,9 +107,9 @@ impl Searcher
 
         if depth > 0
         {
-            let legal_moves = MoveGen::new_legal(position);
             let mut best_score = Exact(BoardScore::NO_SCORE);
             let mut best_move = None;
+            let legal_moves = MoveGen::new_legal(position);
 
             // TODO: Use better move ordering, e.g. test the best move first, then
             // all captures, and then the remaining moves.
@@ -163,11 +164,9 @@ impl Searcher
                 }
                 else
                 {
+                    // TODO: This evaluation is valid for any depth for purposes of hashtable lookup.
                     best_score = Exact(BoardScore::EVEN);
                 }
-
-                // TODO: This evaluation is valid for any depth for purposes of hashtable lookup.
-                //depth = 255;
             }
             else
             {
@@ -176,13 +175,20 @@ impl Searcher
                 best_score = best_score.increment_mate_plies();
             }
 
-            // println!("info string returning {best_score} at depth = {depth}");
-            self.hashmap.insert(*position, HashEntry {
+            let hash_entry = HashEntry {
                 hash: position.get_hash(),
                 best_move,
                 score: best_score,
-                depth: depth as u8,
-            });
+                depth: if best_score.is_exact() && best_score.unwrap().is_mate_score() {
+                    // This evaluation is valid for any depth for purposes of hashtable lookup.
+                    255
+                } else {
+                    depth as u8
+                },
+            };
+
+            // println!("info string returning {best_score} at depth = {depth}");
+            self.hashmap.insert(*position, hash_entry);
             best_score
         }
         else
@@ -200,6 +206,7 @@ impl Searcher
         debug_assert!(alpha <= beta);
 
         // TODO: Quiescent search should go here
+        // TODO: This method should also store its scores in the hash map
         let legal_moves = MoveGen::new_legal(position);
         if legal_moves.len() > 0
         {
@@ -214,6 +221,7 @@ impl Searcher
             }
             else
             {
+                // TODO: This evaluation is valid for any depth for purposes of hashtable lookup.
                 BoardScore::EVEN
             }
         }

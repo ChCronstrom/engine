@@ -48,6 +48,12 @@ impl BoardScore
         }
     }
 
+    pub fn is_mate_score(self) -> bool
+    {
+        self >= Self::MATE_RANGE_BOTTOM ||
+        (self <= Self::MATED_RANGE_TOP && self != Self::NO_SCORE)
+    }
+
     pub fn increment_mate_plies(self) -> Self
     {
         if self > Self::MATE_RANGE_BOTTOM {
