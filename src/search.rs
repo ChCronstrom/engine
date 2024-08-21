@@ -67,7 +67,26 @@ impl Searcher
     {
         use BoundedScore::*;
 
-        // First, look up in hash table to see if this node has been searched already...
+        debug_assert!(depth < 256);
+        debug_assert!(position.is_sane());
+        debug_assert!(alpha != BoardScore::NO_SCORE);
+        debug_assert!(beta != BoardScore::NO_SCORE);
+        debug_assert!(alpha <= beta);
+
+        // First, alpha and beta may be overdetermined, so no searching is necessary. This will happen
+        // if, say, a mate-in-five has been found on another branch, and we are now six plies deep on
+        // this branch. There is no way be can beat a mate-in-five at a depth of six, so we bail.
+        if alpha >= BoardScore::BEST_SCORE {
+            // BEST_SCORE can never be achieved on a real board, the best is MATE
+            return UpperBound(BoardScore::MATE);
+        }
+
+        if beta == BoardScore::WORST_SCORE {
+            // WORST_SCORE can never be achieved on a real board, the worst is MATED
+            return LowerBound(BoardScore::MATED);
+        }
+
+        // Second, look up in hash table to see if this node has been searched already...
         if let Some(hash_entry) = self.hashmap.get(position)
         {
             // ... and to sufficient depth.
@@ -97,7 +116,18 @@ impl Searcher
             {
                 let new_position = position.make_move_new(next_move);
                 // println!("Trying move {next_move} {{");
-                let search_score = -self.alphabeta_search(depth - 1, &new_position, -beta, -alpha);
+                let search_score = -self.alphabeta_search(
+                    depth - 1,
+                    &new_position,
+                    -beta.decrement_mate_plies(),
+                    -alpha.decrement_mate_plies());
+
+                if search_score.is_lowerbound() {
+                    debug_assert!(search_score.unwrap() >= beta);
+                }
+                if search_score.is_upperbound() {
+                    debug_assert!(search_score.unwrap() <= alpha);
+                }
 
                 if search_score.unwrap() > best_score.unwrap() {
                     // println!("New best move {next_move} with score {search_score}");
@@ -106,10 +136,8 @@ impl Searcher
                     if search_score.unwrap() > alpha
                     {
                         // Found a move better than alpha, so update alpha.
+                        debug_assert!(!search_score.is_upperbound(), "UpperBound scores should not raise alpha");
                         alpha = search_score.unwrap();
-
-                        // I have a hunch that this will be true
-                        debug_assert!(search_score.is_exact());
                     }
                 }
                 // println!("}}")
@@ -118,7 +146,7 @@ impl Searcher
                     // This particular position is "too good" for us, and will therefore never be played
                     // by a minmaxing opponent anyway, so further search can be pruned. This score is
                     // now a LowerBound score: there could be even higher scores in the other moves.
-                    debug_assert!(best_score.is_exact()); // TODO: Is this correct?
+                    debug_assert!(!best_score.is_upperbound(), "UpperBound scores should not cause beta termination"); // TODO: Is this correct?
                     // println!("beta bailing: {best_score:?} > {beta:?}");
                     best_score = LowerBound(best_score.unwrap());
                     break;
@@ -164,8 +192,13 @@ impl Searcher
         }
     }
 
-    fn leaf_evaluation(&self, position: &Board, _alpha: BoardScore, _beta: BoardScore) -> BoardScore
+    fn leaf_evaluation(&self, position: &Board, alpha: BoardScore, beta: BoardScore) -> BoardScore
     {
+        debug_assert!(position.is_sane());
+        debug_assert!(alpha != BoardScore::NO_SCORE);
+        debug_assert!(beta != BoardScore::NO_SCORE);
+        debug_assert!(alpha <= beta);
+
         // TODO: Quiescent search should go here
         let legal_moves = MoveGen::new_legal(position);
         if legal_moves.len() > 0

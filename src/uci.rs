@@ -151,6 +151,7 @@ impl UciClient
             }
         }
 
+        assert!(result_position.is_sane());
         self.position = result_position;
     }
 
@@ -217,32 +218,32 @@ impl UciClient
     fn command_go(&self)
     {
         let mut searcher = search::Searcher::new();
-        let depth = 3;
-        let score = searcher.alphabeta_search(depth, &self.position, crate::score::BoardScore::WORST_SCORE, crate::score::BoardScore::BEST_SCORE);
-        let hashmap = searcher.hashmap();
-        println!("info hashfull {}", hashmap.len());
-        let mut pv = String::new();
-        let mut position = self.position;
-        loop {
-            let entry = hashmap.get(&position);
-            if let Some(entry) = entry
-            {
-                if let Some(best_move) = entry.best_move
+        for depth in 1..11 {
+            let score = searcher.alphabeta_search(depth, &self.position, crate::score::BoardScore::WORST_SCORE, crate::score::BoardScore::BEST_SCORE);
+            let hashmap = searcher.hashmap();
+            let mut pv = String::new();
+            let mut position = self.position;
+            loop {
+                let entry = hashmap.get(&position);
+                if let Some(entry) = entry
                 {
-                    write!(pv, " {}", best_move).expect("string write always succeeds");
-                    position = position.make_move_new(best_move)
+                    if let Some(best_move) = entry.best_move
+                    {
+                        write!(pv, " {}", best_move).expect("string write always succeeds");
+                        position = position.make_move_new(best_move)
+                    }
+                    else
+                    {
+                        break
+                    }
                 }
                 else
                 {
                     break
                 }
             }
-            else
-            {
-                break
-            }
+            println!("info depth {depth} score {score} hashfull {} pv{pv}", hashmap.len());
         }
-        println!("info depth {depth} score {score} pv{pv}");
     }
 
 }

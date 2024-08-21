@@ -59,6 +59,17 @@ impl BoardScore
         }
     }
 
+    pub fn decrement_mate_plies(self) -> Self
+    {
+        if self > Self::MATE_RANGE_BOTTOM {
+            Self { inner: self.inner.saturating_add(1) }
+        } else if self < Self::MATED_RANGE_TOP && self >= Self::MATED {
+            Self { inner: self.inner - 1 }
+        } else {
+            self
+        }
+    }
+
     pub fn evaluation(evaluation: i16) -> BoardScore
     {
         BoardScore { inner: evaluation }
