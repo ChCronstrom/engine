@@ -2,7 +2,7 @@ use std::io;
 use std::io::BufRead;
 use std::str::{FromStr, SplitAsciiWhitespace};
 
-use crate::searchinterface::SearchInterface;
+use crate::searchinterface::{SearchInterface, StopConditions};
 
 pub struct UciClient
 {
@@ -48,7 +48,7 @@ impl UciClient
                     "position" => self.command_position(command_words),
                     "d" => self.command_d(),
 
-                    "go" => self.command_go(),
+                    "go" => self.command_go(command_words),
                     "stop" => self.command_stop(),
 
                     "quit" => {
@@ -217,9 +217,38 @@ impl UciClient
         print!("{}", display_str);
     }
 
-    fn command_go(&mut self)
+    fn command_go(&mut self, mut arguments: SplitAsciiWhitespace)
     {
-        self.search_interface.go(&self.position);
+        let mut stop_conditions = StopConditions::new();
+
+        loop
+        {
+           match arguments.next()
+           {
+                Some("depth") => {
+                    let depth_str = arguments.next().unwrap_or("");
+                    let depth_u8 = u8::from_str(depth_str);
+                    match depth_u8
+                    {
+                        Ok(d) => {
+                            *stop_conditions.depth.get_mut() = d;
+                        }
+                        Err(e) => {
+                            println!("ERROR: Invalid depth \"{depth_str}\": {e}");
+                            return;
+                        }
+                    }
+                }
+
+                None => break,
+
+                Some(other) => {
+                    println!("ERROR: Unknown specifier \"{other}\"");
+                    return;
+                }
+           }
+        }
+        self.search_interface.go(&self.position, stop_conditions);
     }
 
     fn command_stop(&mut self)

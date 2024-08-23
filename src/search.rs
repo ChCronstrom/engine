@@ -7,7 +7,7 @@ use crate::evaluation;
 use crate::score::{BoardScore, BoundedScore};
 use crate::searchinterface::StopConditions;
 
-const MAX_DEPTH: usize = u8::MAX as usize;
+pub const MAX_DEPTH: usize = u8::MAX as usize;
 
 /*
  * Optimal hash entry:
@@ -67,9 +67,14 @@ impl<'a> Searcher<'a>
 
     pub fn search(&mut self, position: Board)
     {
+        // TODO: Loop from the latest depth in the hash table instead of 1?
         for depth in 1..=MAX_DEPTH
         {
             if self.should_stop_search() {
+                break;
+            }
+
+            if depth > self.stop_conditions.depth.load(Ordering::Relaxed) as usize {
                 break;
             }
 

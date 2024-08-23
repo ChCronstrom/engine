@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc;
 use std::thread;
 
@@ -33,7 +33,7 @@ impl SearchInterface
         }
     }
 
-    pub fn go(&mut self, position: &chess::Board)
+    pub fn go(&mut self, position: &chess::Board, stop_conditions: StopConditions)
     {
         // If search is running, get it to stop
         if self.is_running()
@@ -50,6 +50,7 @@ impl SearchInterface
 
         // Set new stop parameters
         self.set_stop_now(false);
+        self.stop_conditions.assign(stop_conditions);
         
         // Give new position to thread
         self.channel.send(ThreadCommand::Go(*position))
@@ -111,6 +112,7 @@ pub struct StopConditions
 {
     pub is_running: AtomicBool,
     pub stop_now: AtomicBool,
+    pub depth: AtomicU8,
 }
 
 impl StopConditions
@@ -120,6 +122,12 @@ impl StopConditions
         StopConditions {
             stop_now: AtomicBool::new(false),
             is_running: AtomicBool::new(false),
+            depth: AtomicU8::new(255),
         }
+    }
+
+    pub fn assign(&self, new: Self)
+    {
+        self.depth.store(new.depth.into_inner(), Ordering::Release);
     }
 }

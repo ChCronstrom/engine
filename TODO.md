@@ -7,7 +7,7 @@ Engine should be compatible with GUIs at this point!
 Additional stuff:
 - ☐ Suitable hash table to prevent infinite growth
 - ☐ Previous best move search heuristic
-- ☐ Stop condition: depth parameter
+- ☑ Stop condition: depth parameter
 - ☐ Stop condition: movetime parameter
 - ☐ Stop condition: nodes parameter
 - ☐ Stop condition: mate parameter
