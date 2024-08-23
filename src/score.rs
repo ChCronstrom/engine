@@ -54,22 +54,33 @@ impl BoardScore
         (self <= Self::MATED_RANGE_TOP && self != Self::NO_SCORE)
     }
 
+    /// Increment the ply count in mate-in-n evaluations.
+    ///
+    /// For example: mate-in-5 becomes mate-in-6, and mated-in-5 becomes mated-in-6.
+    /// Values of NO_SCORE are unaffected, as are BEST_SCORE and WORST_SCORE. The maximum number of
+    /// plies that can be represented is 255, and beyond this the count saturates. So mate-in-255 will
+    /// increment to mate-in-255.
     pub fn increment_mate_plies(self) -> Self
     {
-        if self > Self::MATE_RANGE_BOTTOM {
+        if self > Self::MATE_RANGE_BOTTOM && self <= Self::MATE {
             Self { inner: self.inner - 1 }
-        } else if self < Self::MATED_RANGE_TOP && self != Self::NO_SCORE {
+        } else if self < Self::MATED_RANGE_TOP && self >= Self::MATED {
             Self { inner: self.inner + 1 }
         } else {
             self
         }
     }
 
+    /// Decrement the ply count in mate-in-n evaluations.
+    ///
+    /// For example: mate-in-5 becomes mate-in-4, and mated-in-5 becomes mated-in-4.
+    /// Values of NO_SCORE are unaffected. MATE becomes BEST_SCORE, and MATED becomes WORST_SCORE,
+    /// which is useful in the tree search.
     pub fn decrement_mate_plies(self) -> Self
     {
-        if self > Self::MATE_RANGE_BOTTOM {
-            Self { inner: self.inner.saturating_add(1) }
-        } else if self < Self::MATED_RANGE_TOP && self >= Self::MATED {
+        if self >= Self::MATE_RANGE_BOTTOM && self <= Self::MATE {
+            Self { inner: self.inner + 1 }
+        } else if self <= Self::MATED_RANGE_TOP && self >= Self::MATED {
             Self { inner: self.inner - 1 }
         } else {
             self
@@ -215,6 +226,35 @@ impl std::ops::Neg for BoundedScore
     }
 }
 
+impl std::cmp::PartialOrd for BoundedScore
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering>
+    {
+        use BoundedScore::*;
+
+        match (self, other)
+        {
+            (LowerBound(a), LowerBound(b)) |
+            (Exact(a),      Exact(b))      |
+            (UpperBound(a), UpperBound(b)) => std::cmp::PartialOrd::partial_cmp(a, b),
+
+            (LowerBound(a), Exact(b))      |
+            (LowerBound(a), UpperBound(b)) |
+            (Exact(a),      UpperBound(b))
+                if a >= b
+                => std::cmp::PartialOrd::partial_cmp(a, b),
+
+            (Exact(a),      LowerBound(b)) |
+            (UpperBound(a), LowerBound(b)) |
+            (UpperBound(a), Exact(b))
+                if a <= b
+                => std::cmp::PartialOrd::partial_cmp(a, b),
+
+            _ => None,
+        }
+    }
+}
+
 impl std::fmt::Display for BoundedScore
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -230,4 +270,41 @@ impl std::fmt::Display for BoundedScore
 
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod test
+{
+    use super::*;
+
+    #[test]
+    fn test_boardscore_compare()
+    {
+        assert!(BoardScore::MATE > BoardScore::EVEN);
+        assert!(BoardScore::MATE >= BoardScore::EVEN);
+        assert!(BoardScore::EVEN < BoardScore::MATE);
+        assert!(BoardScore::EVEN <= BoardScore::MATE);
+
+        assert!(BoardScore::MATE > BoardScore::MATED);
+        assert!(BoardScore::MATE >= BoardScore::MATED);
+        assert!(BoardScore::MATED < BoardScore::MATE);
+        assert!(BoardScore::MATED <= BoardScore::MATE);
+    }
+
+    #[test]
+    fn test_bounded_boardscore_compare()
+    {
+        use BoundedScore::*;
+
+        let low = BoardScore{ inner: -10 };
+        let mid = BoardScore::EVEN;
+        let high = BoardScore { inner: 10 };
+
+        assert!(Exact(mid) > UpperBound(low));
+        assert!(LowerBound(high) > Exact(mid));
+
+        assert!(!(UpperBound(mid) > Exact(low)));
+        assert!(!(LowerBound(mid) < Exact(high)));
+    }
+
 }

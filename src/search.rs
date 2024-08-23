@@ -1,8 +1,13 @@
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
+use std::fmt::Write;
 
 use chess::{Board, ChessMove, MoveGen};
 use crate::evaluation;
 use crate::score::{BoardScore, BoundedScore};
+use crate::searchinterface::StopConditions;
+
+const MAX_DEPTH: usize = u8::MAX as usize;
 
 /*
  * Optimal hash entry:
@@ -43,18 +48,35 @@ impl HashEntry
     }
 }
 
-pub struct Searcher
+pub struct Searcher<'a>
 {
     // TODO: Use a better, custom hashmap
     hashmap: HashMap<Board, HashEntry>,
+    stop_conditions: &'a StopConditions,
 }
 
-impl Searcher
+impl<'a> Searcher<'a>
 {
-    pub fn new() -> Self
+    pub fn new(stop_conditions: &'a StopConditions) -> Self
     {
         Searcher {
             hashmap: HashMap::new(),
+            stop_conditions,
+        }
+    }
+
+    pub fn search(&mut self, position: Board)
+    {
+        for depth in 1..=MAX_DEPTH
+        {
+            if self.should_stop_search() {
+                break;
+            }
+
+            let score = self.alphabeta_search(depth, &position, BoardScore::WORST_SCORE, BoardScore::BEST_SCORE);
+            let hashfull = self.hashmap.len();
+            let pv = self.trace_pv(&position);
+            println!("info depth {depth} multipv 1 score {score} hashfull {hashfull} pv{pv}");
         }
     }
 
@@ -63,11 +85,14 @@ impl Searcher
     /// If the score is higher than `beta`, it may not calculate the exact score, but instead provide
     /// a `BoundedScore::LowerBound` of at least `beta`. Similarly, if the score is lower than `alpha`
     /// it may instead calculate a `BoundedScore::UpperBound` of at most `alpha`.
-    pub fn alphabeta_search(&mut self, depth: usize, position: &Board, mut alpha: BoardScore, beta: BoardScore) -> BoundedScore
+    ///
+    /// If the search gets stopped partway, it may also return `LowerBound` and `UpperBound` scores that
+    /// lie inside the range of `alpha` and `beta`.
+    fn alphabeta_search(&mut self, depth: usize, position: &Board, mut alpha: BoardScore, beta: BoardScore) -> BoundedScore
     {
         use BoundedScore::*;
 
-        debug_assert!(depth < 256);
+        debug_assert!(depth <= MAX_DEPTH);
         debug_assert!(position.is_sane());
         debug_assert!(alpha != BoardScore::NO_SCORE);
         debug_assert!(beta != BoardScore::NO_SCORE);
@@ -90,6 +115,7 @@ impl Searcher
         if let Some(hash_entry) = self.hashmap.get(position)
         {
             debug_assert!(hash_entry.hash == position.get_hash());
+            debug_assert!(hash_entry.score.unwrap() != BoardScore::NO_SCORE);
             // ... and to sufficient depth.
             if hash_entry.depth as usize >= depth
             {
@@ -107,42 +133,66 @@ impl Searcher
 
         if depth > 0
         {
-            let mut best_score = Exact(BoardScore::NO_SCORE);
+            let mut best_score = UpperBound(BoardScore::NO_SCORE);
             let mut best_move = None;
+            let mut any_moves = false;
             let legal_moves = MoveGen::new_legal(position);
 
             // TODO: Use better move ordering, e.g. test the best move first, then
             // all captures, and then the remaining moves.
             for next_move in legal_moves
             {
+                any_moves = true;
+
+                if self.should_stop_search() {
+                    // We are terminating the search early!
+                    // Exact scores are now only LowerBound - we could have missed better moves!
+                    if best_score.is_exact() { best_score = LowerBound(best_score.unwrap()) }
+                    // UpperBound scores are now completely useless - the missed moves have no known
+                    // upper bound for their score, so we know neither an upper bound nor a lower bound
+                    // for the score of this position.
+                    else if best_score.is_upperbound() { best_score = UpperBound(BoardScore::NO_SCORE) }
+
+                    // TODO: Maybe instead of bailing completely, it should reduce depth to 0 for the
+                    // remaining searches, so that it reuses the hashed results of lower depth from
+                    // last iteration?
+                    break;
+                }
+
                 let new_position = position.make_move_new(next_move);
                 // println!("Trying move {next_move} {{");
                 let search_score = -self.alphabeta_search(
                     depth - 1,
                     &new_position,
                     -beta.decrement_mate_plies(),
-                    -alpha.decrement_mate_plies());
+                    -alpha.decrement_mate_plies())
+                    .increment_mate_plies();
 
-                if search_score.is_lowerbound() {
-                    debug_assert!(search_score.unwrap() >= beta);
-                }
-                if search_score.is_upperbound() {
-                    debug_assert!(search_score.unwrap() <= alpha);
+                // Assertions for testing that alphabeta has returned a reasonable result. These are
+                // not necessarily true if search was aborted partway.
+                if !self.should_stop_search() {
+                    debug_assert!(search_score.unwrap() != BoardScore::NO_SCORE);
+                    if search_score.is_lowerbound() {
+                        debug_assert!(search_score.unwrap() >= beta);
+                    }
+                    if search_score.is_upperbound() {
+                        debug_assert!(search_score.unwrap() <= alpha);
+                    }
                 }
 
-                if search_score.unwrap() > best_score.unwrap() {
+                if search_score > best_score {
                     // println!("New best move {next_move} with score {search_score}");
                     best_score = search_score;
                     best_move = Some(next_move);
-                    if search_score.unwrap() > alpha
+                    if !search_score.is_upperbound() && search_score.unwrap() > alpha
                     {
                         // Found a move better than alpha, so update alpha.
                         debug_assert!(!search_score.is_upperbound(), "UpperBound scores should not raise alpha");
                         alpha = search_score.unwrap();
                     }
                 }
-                // println!("}}")
-                if best_score.unwrap() >= beta {
+                // println!("}}");
+                if !best_score.is_upperbound() && best_score.unwrap() >= beta {
                     // If we found a move better than beta, we don't need to consider any other moves.
                     // This particular position is "too good" for us, and will therefore never be played
                     // by a minmaxing opponent anyway, so further search can be pruned. This score is
@@ -154,7 +204,7 @@ impl Searcher
                 }
             }
 
-            if best_move.is_none()
+            if !any_moves
             {
                 // There were no legal moves!
                 // This means checkmate or stalemate
@@ -172,23 +222,27 @@ impl Searcher
             {
                 // Increase mate distance, e.g. "mate in 4" becomes "mate in 5" since we are one step
                 // above in the tree. Does nothing for centipawn evaluations.
-                best_score = best_score.increment_mate_plies();
+                // best_score = best_score.increment_mate_plies(); // XXX moved up
             }
 
-            let hash_entry = HashEntry {
-                hash: position.get_hash(),
-                best_move,
-                score: best_score,
-                depth: if best_score.is_exact() && best_score.unwrap().is_mate_score() {
-                    // This evaluation is valid for any depth for purposes of hashtable lookup.
-                    255
-                } else {
-                    depth as u8
-                },
-            };
+            if best_score.unwrap() != BoardScore::NO_SCORE
+            {
+                let hash_entry = HashEntry {
+                    hash: position.get_hash(),
+                    best_move,
+                    score: best_score,
+                    depth: if best_score.is_exact() && best_score.unwrap().is_mate_score() {
+                        // This evaluation is valid for any depth for purposes of hashtable lookup.
+                        MAX_DEPTH as u8
+                    } else {
+                        depth as u8
+                    },
+                };
 
-            // println!("info string returning {best_score} at depth = {depth}");
-            self.hashmap.insert(*position, hash_entry);
+                // println!("info string returning {best_score} at depth = {depth}");
+                self.hashmap.insert(*position, hash_entry);
+            }
+
             best_score
         }
         else
@@ -243,24 +297,30 @@ impl Searcher
     {
         &self.hashmap
     }
-}
 
-#[cfg(test)]
-mod test
-{
-    use super::*;
-
-    #[test]
-    fn test_boardscore_compare()
+    fn should_stop_search(&mut self) -> bool
     {
-        assert!(BoardScore::MATE > BoardScore::EVEN);
-        assert!(BoardScore::MATE >= BoardScore::EVEN);
-        assert!(BoardScore::EVEN < BoardScore::MATE);
-        assert!(BoardScore::EVEN <= BoardScore::MATE);
+        self.stop_conditions.stop_now.load(Ordering::Relaxed)
+    }
 
-        assert!(BoardScore::MATE > BoardScore::MATED);
-        assert!(BoardScore::MATE >= BoardScore::MATED);
-        assert!(BoardScore::MATED < BoardScore::MATE);
-        assert!(BoardScore::MATED <= BoardScore::MATE);
+    fn trace_pv(&self, position: &Board) -> String
+    {
+        let mut result = String::new();
+
+        let mut position = *position;
+        while let Some(hash_entry) = self.hashmap.get(&position)
+        {
+            if let Some(best_move) = hash_entry.best_move
+            {
+                write!(result, " {}", best_move).expect("string write always succeeds");
+                position = position.make_move_new(best_move);
+            }
+            else
+            {
+                break
+            }
+        }
+
+        result
     }
 }

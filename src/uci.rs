@@ -1,14 +1,14 @@
 use std::io;
 use std::io::BufRead;
-use std::fmt::Write;
 use std::str::{FromStr, SplitAsciiWhitespace};
 
-use crate::search;
+use crate::searchinterface::SearchInterface;
 
 pub struct UciClient
 {
     stdin: io::StdinLock<'static>,
     position: chess::Board,
+    search_interface: SearchInterface,
 }
 
 impl UciClient
@@ -18,6 +18,7 @@ impl UciClient
         UciClient {
             stdin: io::stdin().lock(),
             position: chess::Board::default(),
+            search_interface: SearchInterface::new(),
         }
     }
 
@@ -48,6 +49,7 @@ impl UciClient
                     "d" => self.command_d(),
 
                     "go" => self.command_go(),
+                    "stop" => self.command_stop(),
 
                     "quit" => {
                         return;
@@ -215,35 +217,14 @@ impl UciClient
         print!("{}", display_str);
     }
 
-    fn command_go(&self)
+    fn command_go(&mut self)
     {
-        let mut searcher = search::Searcher::new();
-        for depth in 1..11 {
-            let score = searcher.alphabeta_search(depth, &self.position, crate::score::BoardScore::WORST_SCORE, crate::score::BoardScore::BEST_SCORE);
-            let hashmap = searcher.hashmap();
-            let mut pv = String::new();
-            let mut position = self.position;
-            loop {
-                let entry = hashmap.get(&position);
-                if let Some(entry) = entry
-                {
-                    if let Some(best_move) = entry.best_move
-                    {
-                        write!(pv, " {}", best_move).expect("string write always succeeds");
-                        position = position.make_move_new(best_move)
-                    }
-                    else
-                    {
-                        break
-                    }
-                }
-                else
-                {
-                    break
-                }
-            }
-            println!("info depth {depth} score {score} hashfull {} pv{pv}", hashmap.len());
-        }
+        self.search_interface.go(&self.position);
+    }
+
+    fn command_stop(&mut self)
+    {
+        self.search_interface.stop();
     }
 
 }

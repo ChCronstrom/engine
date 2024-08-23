@@ -4,6 +4,7 @@ mod evaluation;
 mod uci;
 mod score;
 mod search;
+mod searchinterface;
 
 fn main()
 {
