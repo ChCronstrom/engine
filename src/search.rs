@@ -83,6 +83,11 @@ impl<'a> Searcher<'a>
             let pv = self.trace_pv(&position);
             println!("info depth {depth} multipv 1 score {score} hashfull {hashfull} pv{pv}");
         }
+        let best_move = self.hashmap.get(&position)
+            .expect("Root node has bene purged from hash map")
+            .best_move
+            .expect("root node had no best move?");
+        println!("bestmove {best_move}");
     }
 
     /// Calculate the score for a position with alpha-beta search

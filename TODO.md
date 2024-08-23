@@ -1,5 +1,5 @@
 - ☑ Make search happen on separate thread, for compatibility with UCI GUIs
-- ☐ Respond with "bestmove"
+- ☑ Respond with "bestmove"
 - ☑ Stop condition: stop command
 - ☐ Stop condition: wtime btime winc binc time management
 Engine should be compatible with GUIs at this point!
