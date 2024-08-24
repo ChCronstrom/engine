@@ -1,5 +1,6 @@
 use std::fmt::Write;
 use std::sync::atomic::Ordering;
+use std::time;
 
 use chess::{Board, MoveGen};
 use crate::evaluation;
@@ -14,6 +15,8 @@ pub struct Searcher<'a>
     // TODO: Use a better, custom hashmap
     hashmap: HashMap,
     stop_conditions: &'a StopConditions,
+    nodes: u64,
+    starttime: time::Instant,
 }
 
 impl<'a> Searcher<'a>
@@ -23,11 +26,16 @@ impl<'a> Searcher<'a>
         Searcher {
             hashmap: HashMap::new(1),
             stop_conditions,
+            nodes: 0,
+            starttime: time::Instant::now(),
         }
     }
 
     pub fn search(&mut self, position: Board)
     {
+        self.nodes = 0;
+        self.starttime = time::Instant::now();
+
         // TODO: Loop from the latest depth in the hash table instead of 1?
         for depth in 1..=MAX_DEPTH
         {
@@ -40,9 +48,13 @@ impl<'a> Searcher<'a>
             }
 
             let score = self.alphabeta_search(depth, &position, BoardScore::WORST_SCORE, BoardScore::BEST_SCORE);
+
+            let nodes = self.nodes;
+            let time = self.starttime.elapsed().as_millis() as u64;
+            let nps = if time != 0 { (1000 * nodes) / time } else { 0 };
             let hashfull = (1000 * self.hashmap.filled()) / self.hashmap.capacity();
             let pv = self.trace_pv(&position);
-            println!("info depth {depth} multipv 1 score {score} hashfull {hashfull} pv{pv}");
+            println!("info depth {depth} multipv 1 score {score} nodes {nodes} nps {nps} hashfull {hashfull} time {time} pv{pv}");
         }
         let best_move = self.hashmap.get(&position)
             .expect("Root node has been purged from hash map")
@@ -68,6 +80,7 @@ impl<'a> Searcher<'a>
         debug_assert!(alpha != BoardScore::NO_SCORE);
         debug_assert!(beta != BoardScore::NO_SCORE);
         debug_assert!(alpha <= beta);
+        self.nodes += 1;
 
         // First, alpha and beta may be overdetermined, so no searching is necessary. This will happen
         // if, say, a mate-in-five has been found on another branch, and we are now six plies deep on
@@ -223,12 +236,14 @@ impl<'a> Searcher<'a>
         }
     }
 
-    fn leaf_evaluation(&self, position: &Board, alpha: BoardScore, beta: BoardScore) -> BoardScore
+    fn leaf_evaluation(&mut self, position: &Board, alpha: BoardScore, beta: BoardScore) -> BoardScore
     {
         debug_assert!(position.is_sane());
         debug_assert!(alpha != BoardScore::NO_SCORE);
         debug_assert!(beta != BoardScore::NO_SCORE);
         debug_assert!(alpha <= beta);
+
+        self.nodes += 1;
 
         // TODO: Quiescent search should go here
         // TODO: This method should also store its scores in the hash map
