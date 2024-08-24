@@ -1,10 +1,11 @@
 #![feature(str_split_whitespace_remainder)]
 
 mod evaluation;
-mod uci;
+mod hash;
 mod score;
 mod search;
 mod searchinterface;
+mod uci;
 
 fn main()
 {

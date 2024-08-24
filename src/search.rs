@@ -1,57 +1,18 @@
-use std::collections::HashMap;
-use std::sync::atomic::Ordering;
 use std::fmt::Write;
+use std::sync::atomic::Ordering;
 
-use chess::{Board, ChessMove, MoveGen};
+use chess::{Board, MoveGen};
 use crate::evaluation;
+use crate::hash::{HashEntry, HashMap};
 use crate::score::{BoardScore, BoundedScore};
 use crate::searchinterface::StopConditions;
 
 pub const MAX_DEPTH: usize = u8::MAX as usize;
 
-/*
- * Optimal hash entry:
- * 8 bytes hash
- * 2 bytes Score
- * 1 byte depth
- * 3 bytes Option<ChessMove> (1 byte alignment)
- *      (could be compressed to 2 bytes if necessary:
- *          3 bits source file
- *          3 bits source rank
- *          3 bits target file
- *          3 bits target rank
- *          3 bits promotion (-, N, B, R, Q)
- *          1 bit Some/None)
- * 1 byte: is score exact, lower bound, or upper bound (later also quiescent, etc)
- * 1 byte spare (or used for "generation" counter?)
- * 16 bytes total, 8 byte alignment
- */
-#[derive(Clone, Copy)]
-pub struct HashEntry
-{
-    pub hash: u64,
-    pub best_move: Option<ChessMove>,
-    pub score: BoundedScore,
-    pub depth: u8,
-}
-
-impl HashEntry
-{
-    pub fn new() -> Self
-    {
-        HashEntry {
-            hash: 0,
-            best_move: None,
-            score: BoundedScore::Exact(BoardScore::NO_SCORE),
-            depth: 0,
-        }
-    }
-}
-
 pub struct Searcher<'a>
 {
     // TODO: Use a better, custom hashmap
-    hashmap: HashMap<Board, HashEntry>,
+    hashmap: HashMap,
     stop_conditions: &'a StopConditions,
 }
 
@@ -60,7 +21,7 @@ impl<'a> Searcher<'a>
     pub fn new(stop_conditions: &'a StopConditions) -> Self
     {
         Searcher {
-            hashmap: HashMap::new(),
+            hashmap: HashMap::new(1),
             stop_conditions,
         }
     }
@@ -79,7 +40,7 @@ impl<'a> Searcher<'a>
             }
 
             let score = self.alphabeta_search(depth, &position, BoardScore::WORST_SCORE, BoardScore::BEST_SCORE);
-            let hashfull = self.hashmap.len();
+            let hashfull = self.hashmap.filled();
             let pv = self.trace_pv(&position);
             println!("info depth {depth} multipv 1 score {score} hashfull {hashfull} pv{pv}");
         }
@@ -237,20 +198,20 @@ impl<'a> Searcher<'a>
 
             if best_score.unwrap() != BoardScore::NO_SCORE
             {
-                let hash_entry = HashEntry {
-                    hash: position.get_hash(),
+                let hash_entry = HashEntry::with_contents(
+                    position.get_hash(),
                     best_move,
-                    score: best_score,
-                    depth: if best_score.is_exact() && best_score.unwrap().is_mate_score() {
+                    best_score,
+                    if best_score.is_exact() && best_score.unwrap().is_mate_score() {
                         // This evaluation is valid for any depth for purposes of hashtable lookup.
                         MAX_DEPTH as u8
                     } else {
                         depth as u8
-                    },
-                };
+                    }
+                );
 
                 // println!("info string returning {best_score} at depth = {depth}");
-                self.hashmap.insert(*position, hash_entry);
+                self.hashmap.insert(position, hash_entry);
             }
 
             best_score
@@ -301,11 +262,6 @@ impl<'a> Searcher<'a>
             White => wpov_eval,
             Black => -wpov_eval,
         }
-    }
-
-    pub fn hashmap(&self) -> &HashMap<Board, HashEntry>
-    {
-        &self.hashmap
     }
 
     fn should_stop_search(&mut self) -> bool

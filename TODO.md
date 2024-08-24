@@ -5,7 +5,7 @@
 Engine should be compatible with GUIs at this point!
 
 Additional stuff:
-- ☐ Suitable hash table to prevent infinite growth
+- ☑ Suitable hash table to prevent infinite growth
 - ☐ Previous best move search heuristic
 - ☑ Stop condition: depth parameter
 - ☐ Stop condition: movetime parameter
@@ -18,3 +18,4 @@ Additional stuff:
 - ☐ Quiescent search: check opponent if interesting? (e.g. check with fork, smothered check, check with pawn advance)
 - ☐ Report info: time, nodes, and and nps
 - ☐ Reuse old data from hash table when search gets stopped
+- ☐ Better purging strategy in hash map
