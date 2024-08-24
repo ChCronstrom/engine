@@ -40,12 +40,12 @@ impl<'a> Searcher<'a>
             }
 
             let score = self.alphabeta_search(depth, &position, BoardScore::WORST_SCORE, BoardScore::BEST_SCORE);
-            let hashfull = self.hashmap.filled();
+            let hashfull = (1000 * self.hashmap.filled()) / self.hashmap.capacity();
             let pv = self.trace_pv(&position);
             println!("info depth {depth} multipv 1 score {score} hashfull {hashfull} pv{pv}");
         }
         let best_move = self.hashmap.get(&position)
-            .expect("Root node has bene purged from hash map")
+            .expect("Root node has been purged from hash map")
             .best_move
             .expect("root node had no best move?");
         println!("bestmove {best_move}");

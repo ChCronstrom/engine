@@ -73,7 +73,7 @@ impl HashEntry
 /// creation time. When new entries are inserted, old entries will be purged.
 ///
 /// ## Purging strategy
-/// 
+///
 /// Evey hash has a fixed number of locations in the map where it can be stored. If all of these locations
 /// are filled, some form of purging is necessary. This purge primarily happens using the generation
 /// number: entries from older generations are purged in favor of newer ones. It also uses the depth
@@ -85,9 +85,11 @@ impl HashEntry
 pub struct HashMap
 {
     pointer: ptr::NonNull<HashEntry>,
-    capacity: usize,
     layout: Layout,
     phantom_data: std::marker::PhantomData<[HashEntry]>,
+
+    count: usize,
+    capacity: usize,
 }
 
 impl HashMap
@@ -114,9 +116,10 @@ impl HashMap
 
         HashMap {
             pointer: allocation,
-            capacity: nbr_entries,
             layout,
             phantom_data: std::marker::PhantomData,
+            count: 0,
+            capacity: nbr_entries,
         }
     }
 
@@ -148,18 +151,26 @@ impl HashMap
         let slot = self.get_slot_mut(slot_idx);
 
         // TODO: Implement a more serious purging strategy
-        *slot = entry;
+        let old_entry = mem::replace(slot, entry);
         slot.entry_type = HashEntryType::Full;
+
+        if old_entry.entry_type == HashEntryType::Unused {
+            self.count += 1
+        }
     }
 
+    /// The capcity of the hash map, in number of entries
     pub fn capacity(&self) -> usize
     {
-        unimplemented!()
+        self.capacity
     }
 
+    /// The number of entries that are filled in the hash map in this generation
+    ///
+    /// If it gets too high, nodes from this generation will start being purged.
     pub fn filled(&self) -> usize
     {
-        0
+        self.count
     }
 
     /// Get the slot where this hash can be stored
@@ -185,7 +196,7 @@ impl HashMap
             self.pointer.offset(slot as isize).as_ref()
         }
     }
-    
+
     /// Get the entry mutable at a particular location
     fn get_slot_mut(&mut self, slot: usize) -> &mut HashEntry
     {
