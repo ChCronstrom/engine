@@ -5,6 +5,7 @@ use std::time;
 use chess::{Board, MoveGen};
 use crate::evaluation;
 use crate::hash::{HashEntry, HashMap};
+use crate::moveorder::MoveGenerator;
 use crate::score::{BoardScore, BoundedScore};
 use crate::searchinterface::StopConditions;
 
@@ -94,6 +95,8 @@ impl<'a> Searcher<'a>
             return LowerBound(BoardScore::MATED);
         }
 
+        let mut previous_best_move = None;
+
         // Second, look up in hash table to see if this node has been searched already...
         if let Some(hash_entry) = self.hashmap.get(position)
         {
@@ -111,7 +114,9 @@ impl<'a> Searcher<'a>
                     _ => { },
                 }
             }
-            // TODO: Even if the score is not compatible, we can use the previous information in our current search.
+            // Even if the score is not compatible, we can use the previous information in our current
+            // search.
+            previous_best_move = hash_entry.best_move;
         }
 
         if self.should_stop_search() {
@@ -123,11 +128,9 @@ impl<'a> Searcher<'a>
             let mut best_score = UpperBound(BoardScore::NO_SCORE);
             let mut best_move = None;
             let mut any_moves = false;
-            let legal_moves = MoveGen::new_legal(position);
+            let move_gen = MoveGenerator::new(position, previous_best_move);
 
-            // TODO: Use better move ordering, e.g. test the best move first, then
-            // all captures, and then the remaining moves.
-            for next_move in legal_moves
+            for next_move in move_gen
             {
                 any_moves = true;
 

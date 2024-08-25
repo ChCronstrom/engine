@@ -2,6 +2,7 @@
 
 mod evaluation;
 mod hash;
+mod moveorder;
 mod score;
 mod search;
 mod searchinterface;
