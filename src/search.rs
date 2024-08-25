@@ -59,7 +59,7 @@ impl<'a> Searcher<'a>
         }
         let best_move = self.hashmap.get(&position)
             .expect("Root node has been purged from hash map")
-            .best_move
+            .best_move()
             .expect("root node had no best move?");
         println!("bestmove {best_move}");
     }
@@ -100,13 +100,13 @@ impl<'a> Searcher<'a>
         // Second, look up in hash table to see if this node has been searched already...
         if let Some(hash_entry) = self.hashmap.get(position)
         {
-            debug_assert!(hash_entry.hash == position.get_hash());
-            debug_assert!(hash_entry.score.unwrap() != BoardScore::NO_SCORE);
+            debug_assert!(hash_entry.hash() == position.get_hash());
+            debug_assert!(hash_entry.score().unwrap() != BoardScore::NO_SCORE);
             // ... and to sufficient depth.
-            if hash_entry.depth >= depth
+            if hash_entry.depth() >= depth
             {
                 // If the previous score is compatible with our alpha-beta bounds, we can return it.
-                match hash_entry.score
+                match hash_entry.score()
                 {
                     Exact(s) => return Exact(s),
                     LowerBound(s) if s >= beta => return LowerBound(s),
@@ -116,7 +116,7 @@ impl<'a> Searcher<'a>
             }
             // Even if the score is not compatible, we can use the previous information in our current
             // search.
-            previous_best_move = hash_entry.best_move;
+            previous_best_move = hash_entry.best_move();
         }
 
         if self.should_stop_search() {
@@ -290,7 +290,7 @@ impl<'a> Searcher<'a>
         let mut position = *position;
         while let Some(hash_entry) = self.hashmap.get(&position)
         {
-            if let Some(best_move) = hash_entry.best_move
+            if let Some(best_move) = hash_entry.best_move()
             {
                 write!(result, " {}", best_move).expect("string write always succeeds");
                 position = position.make_move_new(best_move);

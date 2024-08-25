@@ -3,3 +3,6 @@ info depth 3 score mate 2 pv b3b8 d7b8 d1d8
 
 Promotion to knight is better than queen?
 position fen 8/ppp2kp1/1b3P2/8/3p3N/1P3Q2/P4pPK/4r3 b - - 1 0
+
+Causes crash!
+position fen r1b1k2r/pp3p2/5bp1/q1p4p/2PpP2P/PP6/R2PNnP1/1NQK1B1R w kq - 4 15

@@ -1,0 +1,25 @@
+At commit 367770c
+
+debug build:
+info depth 7 multipv 1 score cp 100 nodes 2046076 nps 319649 hashfull 13 time 6401 pv a2a3 a7a5 c2c3 a5a4 d2d3 b7b5 d1a4
+info depth 8 multipv 1 score cp -100 nodes 27152048 nps 221660 hashfull 195 time 122494 pv a2a3 a7a5 b2b3
+
+release build:
+info depth 7 multipv 1 score cp 100 nodes 2046076 nps 6600245 hashfull 13 time 310 pv a2a3 a7a5 c2c3 a5a4 d2d3 b7b5 d1a4
+info depth 8 multipv 1 score cp -100 nodes 27152048 nps 7036032 hashfull 195 time 3859 pv a2a3 a7a5 b2b3
+
+release build, no assertions:
+info depth 7 multipv 1 score cp 100 nodes 2046076 nps 7055434 hashfull 13 time 290 pv a2a3 a7a5 c2c3 a5a4 d2d3 b7b5 d1a4
+info depth 8 multipv 1 score cp -100 nodes 27152048 nps 7913741 hashfull 195 time 3431 pv a2a3 a7a5 b2b3
+
+At commit b48b25b, now with best-move-first optimization
+
+release build
+info depth 7 multipv 1 score cp 100 nodes 1632618 nps 6352599 hashfull 10 time 257 pv b2b3 b7b6 c1b2 c8a6 a2a3 b6b5 b2g7
+info depth 8 multipv 1 score cp -100 nodes 12705817 nps 6868009 hashfull 95 time 1850 pv b2b3 b7b6 c1b2 a7a5 a2a3 c8a6 c2c3 a6e2
+info depth 9 multipv 1 score cp 100 nodes 43449145 nps 7218665 hashfull 212 time 6019 pv b2b3 b7b6 c1b2 a7a5 a2a3 c8a6 c2c4 a5a4 b3a4
+
+release build, no assertions:
+info depth 7 multipv 1 score cp 100 nodes 1632618 nps 7129336 hashfull 10 time 229 pv b2b3 b7b6 c1b2 c8a6 a2a3 b6b5 b2g7
+info depth 8 multipv 1 score cp -100 nodes 12705817 nps 7794979 hashfull 95 time 1630 pv b2b3 b7b6 c1b2 a7a5 a2a3 c8a6 c2c3 a6e2
+info depth 9 multipv 1 score cp 100 nodes 43449145 nps 8153339 hashfull 212 time 5329 pv b2b3 b7b6 c1b2 a7a5 a2a3 c8a6 c2c4 a5a4 b3a4
