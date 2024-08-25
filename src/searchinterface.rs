@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 use std::sync::mpsc;
 use std::thread;
 
@@ -113,6 +113,7 @@ pub struct StopConditions
     pub is_running: AtomicBool,
     pub stop_now: AtomicBool,
     pub depth: AtomicU8,
+    pub movetime: AtomicU32,
 }
 
 impl StopConditions
@@ -123,11 +124,13 @@ impl StopConditions
             stop_now: AtomicBool::new(false),
             is_running: AtomicBool::new(false),
             depth: AtomicU8::new(255),
+            movetime: AtomicU32::new(0),
         }
     }
 
     pub fn assign(&self, new: Self)
     {
         self.depth.store(new.depth.into_inner(), Ordering::Release);
+        self.movetime.store(new.movetime.into_inner(), Ordering::Release);
     }
 }

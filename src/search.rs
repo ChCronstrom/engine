@@ -275,7 +275,19 @@ impl<'a> Searcher<'a>
 
     fn should_stop_search(&mut self) -> bool
     {
-        self.stop_conditions.stop_now.load(Ordering::Relaxed)
+        if self.stop_conditions.stop_now.load(Ordering::Relaxed) {
+            return true;
+        }
+
+        let movetime = self.stop_conditions.movetime.load(Ordering::Relaxed);
+        if movetime != 0 {
+            let elapsed = self.starttime.elapsed().as_millis();
+            if elapsed >= movetime as u128 {
+                return true;
+            }
+        }
+
+        false
     }
 
     fn trace_pv(&self, position: &Board) -> String

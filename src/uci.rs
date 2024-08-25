@@ -2,6 +2,7 @@ use std::io;
 use std::io::BufRead;
 use std::str::{FromStr, SplitAsciiWhitespace};
 
+use crate::search;
 use crate::searchinterface::{SearchInterface, StopConditions};
 
 pub struct UciClient
@@ -227,14 +228,29 @@ impl UciClient
            {
                 Some("depth") => {
                     let depth_str = arguments.next().unwrap_or("");
-                    let depth_u8 = u8::from_str(depth_str);
-                    match depth_u8
+                    let depth_parsed = search::Depth::from_str(depth_str);
+                    match depth_parsed
                     {
                         Ok(d) => {
                             *stop_conditions.depth.get_mut() = d;
                         }
                         Err(e) => {
                             println!("ERROR: Invalid depth \"{depth_str}\": {e}");
+                            return;
+                        }
+                    }
+                }
+
+                Some("movetime") => {
+                    let movetime_str = arguments.next().unwrap_or("");
+                    let movetime_parsed = u32::from_str(movetime_str);
+                    match movetime_parsed
+                    {
+                        Ok(t) => {
+                            *stop_conditions.movetime.get_mut() = t;
+                        }
+                        Err(e) => {
+                            println!("ERROR: Invalid movetime \"{movetime_str}\": {e}");
                             return;
                         }
                     }
