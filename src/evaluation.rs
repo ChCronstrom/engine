@@ -10,14 +10,15 @@ pub fn evaluate_piece_values(board: &Board) -> BoardScore
 {
     let mut evaluation = 0;
 
-    let white = board.color_combined(Color::White);
-    let black = board.color_combined(Color::Black);
+    let up = board.side_to_move();
+    let red = board.color_combined(up);
+    let blue = board.color_combined(!up);
 
     let piece_balance = |piece: Piece| {
         let pieces = board.pieces(piece);
-        let nbr_white_pieces = (pieces & white).popcnt();
-        let nbr_black_pieces = (pieces & black).popcnt();
-        (nbr_white_pieces as i16) - (nbr_black_pieces as i16)
+        let nbr_red_pieces = (pieces & red).popcnt();
+        let nbr_blue_pieces = (pieces & blue).popcnt();
+        (nbr_red_pieces as i16) - (nbr_blue_pieces as i16)
     };
 
     // Queens are worth 900 centipawns

@@ -263,14 +263,7 @@ impl<'a> Searcher<'a>
 
     fn static_evaluation(&self, position: &Board) -> BoardScore
     {
-        use chess::Color::*;
-
-        let wpov_eval = evaluation::evaluate_piece_values(position);
-        match position.side_to_move()
-        {
-            White => wpov_eval,
-            Black => -wpov_eval,
-        }
+        evaluation::evaluate_piece_values(position)
     }
 
     fn should_stop_search(&mut self) -> bool
