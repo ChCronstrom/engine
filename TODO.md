@@ -17,5 +17,5 @@ Additional stuff:
 - ☐ Quiescent search: promotion
 - ☐ Quiescent search: check opponent if interesting? (e.g. check with fork, smothered check, check with pawn advance)
 - ☑ Report info: time, nodes, and and nps
-- ☐ Reuse old data from hash table when search gets stopped
+- ☑ Reuse old data from hash table when search gets stopped
 - ☐ Better purging strategy in hash map

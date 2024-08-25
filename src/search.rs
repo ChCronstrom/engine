@@ -8,7 +8,7 @@ use crate::hash::{HashEntry, HashMap};
 use crate::score::{BoardScore, BoundedScore};
 use crate::searchinterface::StopConditions;
 
-pub const MAX_DEPTH: usize = u8::MAX as usize;
+pub type Depth = u8;
 
 pub struct Searcher<'a>
 {
@@ -24,7 +24,7 @@ impl<'a> Searcher<'a>
     pub fn new(stop_conditions: &'a StopConditions) -> Self
     {
         Searcher {
-            hashmap: HashMap::new(1),
+            hashmap: HashMap::new(128),
             stop_conditions,
             nodes: 0,
             starttime: time::Instant::now(),
@@ -37,13 +37,13 @@ impl<'a> Searcher<'a>
         self.starttime = time::Instant::now();
 
         // TODO: Loop from the latest depth in the hash table instead of 1?
-        for depth in 1..=MAX_DEPTH
+        for depth in 1..=Depth::MAX
         {
             if self.should_stop_search() {
                 break;
             }
 
-            if depth > self.stop_conditions.depth.load(Ordering::Relaxed) as usize {
+            if depth > self.stop_conditions.depth.load(Ordering::Relaxed) {
                 break;
             }
 
@@ -71,11 +71,10 @@ impl<'a> Searcher<'a>
     ///
     /// If the search gets stopped partway, it may also return `LowerBound` and `UpperBound` scores that
     /// lie inside the range of `alpha` and `beta`.
-    fn alphabeta_search(&mut self, depth: usize, position: &Board, mut alpha: BoardScore, beta: BoardScore) -> BoundedScore
+    fn alphabeta_search(&mut self, mut depth: Depth, position: &Board, mut alpha: BoardScore, beta: BoardScore) -> BoundedScore
     {
         use BoundedScore::*;
 
-        debug_assert!(depth <= MAX_DEPTH);
         debug_assert!(position.is_sane());
         debug_assert!(alpha != BoardScore::NO_SCORE);
         debug_assert!(beta != BoardScore::NO_SCORE);
@@ -101,7 +100,7 @@ impl<'a> Searcher<'a>
             debug_assert!(hash_entry.hash == position.get_hash());
             debug_assert!(hash_entry.score.unwrap() != BoardScore::NO_SCORE);
             // ... and to sufficient depth.
-            if hash_entry.depth as usize >= depth
+            if hash_entry.depth >= depth
             {
                 // If the previous score is compatible with our alpha-beta bounds, we can return it.
                 match hash_entry.score
@@ -113,6 +112,10 @@ impl<'a> Searcher<'a>
                 }
             }
             // TODO: Even if the score is not compatible, we can use the previous information in our current search.
+        }
+
+        if self.should_stop_search() {
+            depth = 0;
         }
 
         if depth > 0
@@ -129,18 +132,11 @@ impl<'a> Searcher<'a>
                 any_moves = true;
 
                 if self.should_stop_search() {
-                    // We are terminating the search early!
-                    // Exact scores are now only LowerBound - we could have missed better moves!
-                    if best_score.is_exact() { best_score = LowerBound(best_score.unwrap()) }
-                    // UpperBound scores are now completely useless - the missed moves have no known
-                    // upper bound for their score, so we know neither an upper bound nor a lower bound
-                    // for the score of this position.
-                    else if best_score.is_upperbound() { best_score = UpperBound(BoardScore::NO_SCORE) }
-
-                    // TODO: Maybe instead of bailing completely, it should reduce depth to 0 for the
-                    // remaining searches, so that it reuses the hashed results of lower depth from
-                    // last iteration?
-                    break;
+                    // We are terminating the search early! We now proceed with a depth 0 search for
+                    // all remaining nodes. This will still look up in the hash table any positions
+                    // already searched, but use leaf evaluation for those nodes that have not previously
+                    // been searched.
+                    depth = 1;
                 }
 
                 let new_position = position.make_move_new(next_move);
@@ -198,15 +194,10 @@ impl<'a> Searcher<'a>
                 }
                 else
                 {
-                    // TODO: This evaluation is valid for any depth for purposes of hashtable lookup.
                     best_score = Exact(BoardScore::EVEN);
                 }
-            }
-            else
-            {
-                // Increase mate distance, e.g. "mate in 4" becomes "mate in 5" since we are one step
-                // above in the tree. Does nothing for centipawn evaluations.
-                // best_score = best_score.increment_mate_plies(); // XXX moved up
+                // This evaluation is valid for any depth for purposes of hashtable lookup.
+                depth = Depth::MAX;
             }
 
             if best_score.unwrap() != BoardScore::NO_SCORE
@@ -217,9 +208,9 @@ impl<'a> Searcher<'a>
                     best_score,
                     if best_score.is_exact() && best_score.unwrap().is_mate_score() {
                         // This evaluation is valid for any depth for purposes of hashtable lookup.
-                        MAX_DEPTH as u8
+                        Depth::MAX
                     } else {
-                        depth as u8
+                        depth
                     }
                 );
 
