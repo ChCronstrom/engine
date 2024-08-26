@@ -1,7 +1,7 @@
-use chess::{Board, Color, Piece};
+use chess::{Board, Piece};
 use crate::score::BoardScore;
 
-pub fn evaluate_always_zero(_: &Board) -> BoardScore
+pub fn _evaluate_always_zero(_: &Board) -> BoardScore
 {
     BoardScore::EVEN
 }
