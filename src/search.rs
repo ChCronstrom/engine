@@ -36,6 +36,7 @@ impl<'a> Searcher<'a>
     {
         self.nodes = 0;
         self.starttime = time::Instant::now();
+        self.hashmap.new_generation();
 
         // TODO: Loop from the latest depth in the hash table instead of 1?
         for depth in 1..=Depth::MAX
