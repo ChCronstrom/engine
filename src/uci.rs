@@ -46,8 +46,10 @@ impl UciClient
                 match command
                 {
                     "uci" => self.command_uci(),
+                    "ucinewgame" => self.command_ucinewgame(),
                     "position" => self.command_position(command_words),
                     "d" => self.command_d(),
+                    "isready" => self.command_isready(),
 
                     "go" => self.command_go(command_words),
                     "stop" => self.command_stop(),
@@ -68,6 +70,11 @@ impl UciClient
         println!("id name Christoffer Engine 1.0");
         println!("id author Christoffer Cronström");
         println!("uciok");
+    }
+
+    fn command_ucinewgame(&mut self)
+    {
+        // TODO: Clear the hash table
     }
 
     fn command_position(&mut self, mut arguments: SplitAsciiWhitespace)
@@ -216,6 +223,11 @@ impl UciClient
 
 
         print!("{}", display_str);
+    }
+
+    fn command_isready(&mut self)
+    {
+        println!("readyok");
     }
 
     fn command_go(&mut self, mut arguments: SplitAsciiWhitespace)

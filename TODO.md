@@ -25,3 +25,4 @@ Additional stuff:
     away over half a minute's worth of thinking. Could be related to the hash table not purging entries
     in a reasonable way. Should maybe create a script for self-play to quantify this behaviour?
 - ☐ Mark hash entries as belonging to this generation if they were useful in the search
+- ☑ Accept the commands ucinewgame and isready
