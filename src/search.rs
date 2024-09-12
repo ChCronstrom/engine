@@ -287,6 +287,7 @@ impl<'a> Searcher<'a>
     fn trace_pv(&self, position: &Board) -> String
     {
         let mut result = String::new();
+        let mut nbr = 0u32;
 
         let mut position = *position;
         while let Some(hash_entry) = self.hashmap.get(&position)
@@ -294,6 +295,10 @@ impl<'a> Searcher<'a>
             if let Some(best_move) = hash_entry.best_move()
             {
                 write!(result, " {}", best_move).expect("string write always succeeds");
+                nbr += 1;
+                if nbr > Depth::MAX as u32 {
+                    break;
+                }
                 position = position.make_move_new(best_move);
             }
             else
