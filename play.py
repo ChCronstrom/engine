@@ -237,8 +237,14 @@ class Match:
         # Update board
         self._board = self._board.move(move)
 
+        # Add extra time if one player is running out: match never runs out of time
+        if self._time_left[color_up] < 100:
+            time_to_add = 100 - self._time_left[color_up]
+            self._time_left[WHITE] += time_to_add
+            self._time_left[BLACK] += time_to_add
+
         # If time is up for color_up, that means self._board.color (which has now been updated) has won
-        if False: #self._time_left[color_up] <= 0:
+        if self._time_left[color_up] <= 0:
             self._status = (WHITEWON if self._board.color == WHITE else BLACKWON,
                             WON_CALLFLAG)
         else:
@@ -257,23 +263,22 @@ class Match:
 
 def create_engine_player(engine="target/release/engine") -> Player:
     player = Player(engine)
-    player.set_go_string(time_management=False, movetime=10000)
+    player.set_go_string(time_management=False, movetime=5000)
     return player
 
-def create_engine_player_maxdepth(engine="target/release/engine") -> Player:
+def create_engine_player_maxdepth(engine: str="target/release/engine", maxdepth: int = 7) -> Player:
     player = Player(engine)
-    player.set_go_string(time_management=False, maxdepth=8)
+    player.set_go_string(time_management=False, maxdepth=maxdepth)
     return player
 
 def create_stockfish20() -> Player:
-    player = Player()
-    player.set_option("Skill Level", 19)
+    player = create_stockfish(19)
     player.set_option_for_midgame("Skill Level", 20)
     return player
 
-def create_stockfish19() -> Player:
+def create_stockfish(level: int = 19) -> Player:
     player = Player()
-    player.set_option("Skill Level", 19)
+    player.set_option("Skill Level", level)
     return player
 
 def create_stockfish20_with_tables_5() -> Player:
@@ -355,15 +360,19 @@ def print_table(teams, matchresults):
     table = [(item, (-item.points, -item.played, -item.points_as_black)) for item in table]
     table.sort(key=lambda x: x[1])
 
-    print("Name        W  D  L  P")
+    print("Name          W  D  L  P")
     for t, _ in table:
-        print(f"{t.name:9}: {t.wins:2} {t.draws:2} {t.losses:2}  {t.points/2}")
+        print(f"{t.name:11}: {t.wins:2} {t.draws:2} {t.losses:2}  {t.points/2}")
 
 
 def main():
     #players = { "20": create_stockfish20(), "T5": create_stockfish20_with_tables_5(), "T6": create_stockfish20_with_tables_6(), "19": create_stockfish19() }
     # players = { "20": create_stockfish20(), "19": create_stockfish19() }
-    players = { "new": create_engine_player(), "maxdepth": create_engine_player_maxdepth(), "old": create_engine_player("./oldengine") }
+    players = { "new": create_engine_player(), "maxdepth": create_engine_player_maxdepth() }
+    # players = { str(depth): create_engine_player_maxdepth(maxdepth=depth) for depth in range(1,8) }
+    # players = { "stockfish": create_engine_player(engine="stockfish"), "me": create_engine_player() }
+    # players["stockfish"].set_go_string(time_management=False, movetime=10)
+    # players["me"].set_go_string(time_management=False, maxdepth=8)
     matches = [ Matchresult(w, b) for w in players for b in players if w != b ]
 
 
@@ -380,11 +389,18 @@ def main():
         print_table(list(players), matches)
         print("")
 
+    for matchentry in matches:
+        result = matchentry.result
+        result_string = "1 - 0" if result == WHITEWON else \
+                        "0 - 1" if result == BLACKWON else \
+                        "½ - ½"
+        print(f"{matchentry.white:12} vs {matchentry.black:12}: {result_string}")
+
 
 
 def two_players():
     wplayer = create_stockfish20()
-    bplayer = create_stockfish19()
+    bplayer = create_stockfish()
 
     match = Match(wplayer, bplayer, time=60000, verbose=True)
     match.finish_game()
