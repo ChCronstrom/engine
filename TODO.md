@@ -19,7 +19,7 @@ Additional stuff:
 - ☑ Report info: time, nodes, and and nps
 - ☑ Reuse old data from hash table when search gets stopped
 - ☑ Better purging strategy in hash map
-- ☐ Crash on position fen r1b1k2r/pp3p2/5bp1/q1p4p/2PpP2P/PP6/R2PNnP1/1NQK1B1R w kq -
+- ☑ Crash on position fen r1b1k2r/pp3p2/5bp1/q1p4p/2PpP2P/PP6/R2PNnP1/1NQK1B1R w kq -
 - ☐ Appears to play extremely weakly when search is aborted partway due to time constraint. Ignoring
     the search and going back to the previous depth appears to give stronger play, even if this throws
     away over half a minute's worth of thinking. Could be related to the hash table not purging entries
