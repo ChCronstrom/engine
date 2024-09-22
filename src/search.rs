@@ -98,20 +98,24 @@ impl<'a> Searcher<'a>
 
         let mut previous_best_move = None;
 
+        // If we are stopping, then we are going to do a quick search of hash entries
+        let is_stopping = self.should_stop_search();
+
         // Second, look up in hash table to see if this node has been searched already...
         if let Some(hash_entry) = self.hashmap.get(position)
         {
             debug_assert!(hash_entry.hash() == position.get_hash());
             debug_assert!(hash_entry.score().unwrap() != BoardScore::NO_SCORE);
             // ... and to sufficient depth.
-            if hash_entry.depth() >= depth
+            if is_stopping || hash_entry.depth() >= depth
             {
                 // If the previous score is compatible with our alpha-beta bounds, we can return it.
+                // If we are stopping the search here, we return these values even if they aren't useful
                 match hash_entry.score()
                 {
                     Exact(s) => return Exact(s),
-                    LowerBound(s) if s >= beta => return LowerBound(s),
-                    UpperBound(s) if s <= alpha => return UpperBound(s),
+                    LowerBound(s) if is_stopping || s >= beta => return LowerBound(s),
+                    UpperBound(s) if is_stopping || s <= alpha => return UpperBound(s),
                     _ => { },
                 }
             }
@@ -120,28 +124,18 @@ impl<'a> Searcher<'a>
             previous_best_move = hash_entry.best_move();
         }
 
-        if self.should_stop_search() {
-            depth = 0;
-        }
-
-        if depth > 0
+        // Do the recursive search of all moves
+        if depth > 0 && !is_stopping
         {
             let mut best_score = UpperBound(BoardScore::NO_SCORE);
             let mut best_move = None;
             let mut any_moves = false;
+            let mut deficient_search = false;
             let move_gen = MoveGenerator::new(position, previous_best_move);
 
             for next_move in move_gen
             {
                 any_moves = true;
-
-                if self.should_stop_search() {
-                    // We are terminating the search early! We now proceed with a depth 0 search for
-                    // all remaining nodes. This will still look up in the hash table any positions
-                    // already searched, but use leaf evaluation for those nodes that have not previously
-                    // been searched.
-                    depth = 1;
-                }
 
                 let new_position = position.make_move_new(next_move);
                 // println!("Trying move {next_move} {{");
@@ -152,16 +146,24 @@ impl<'a> Searcher<'a>
                     -alpha.decrement_mate_plies())
                     .increment_mate_plies();
 
-                // Assertions for testing that alphabeta has returned a reasonable result. These are
-                // not necessarily true if search was aborted partway.
-                if !self.should_stop_search() {
-                    debug_assert!(search_score.unwrap() != BoardScore::NO_SCORE);
-                    if search_score.is_lowerbound() {
-                        debug_assert!(search_score.unwrap() >= beta);
-                    }
-                    if search_score.is_upperbound() {
-                        debug_assert!(search_score.unwrap() <= alpha);
-                    }
+                // Test that alphabeta has returned a reasonable result. This is not necessarily true
+                // if search was aborted partway, which we call a deficient search.
+                // TODO: It could be that the stored result of lower depth from the hash table is of
+                // better quality than the deficient result we're calculating here. This depends on
+                // a number of things. If we've successfully searched the best_move already, then it
+                // is likely that we've got a good result coming. If we got a deficient score from the
+                // best_move, and we actually had a hash entry for this position from before, that
+                // hash entry is likely going to be better to use. Right now we always proceed with
+                // the deficient search, but it could be reasonable to break the loop and just return
+                // the old hash result instead.
+                if
+                    search_score.unwrap() == BoardScore::NO_SCORE ||
+                    (search_score.is_lowerbound() && search_score.unwrap() < beta) ||
+                    (search_score.is_upperbound() && search_score.unwrap() > alpha)
+                {
+                    // Search was deficient!
+                    debug_assert!(self.should_stop_search(), "Deficient scores should only appear if stopping");
+                    deficient_search = true;
                 }
 
                 if search_score > best_score {
@@ -176,12 +178,13 @@ impl<'a> Searcher<'a>
                     }
                 }
                 // println!("}}");
+                // TODO: Fix comparison function so this can be expressed as `best_score > Exact(beta)`
                 if !best_score.is_upperbound() && best_score.unwrap() >= beta {
                     // If we found a move better than beta, we don't need to consider any other moves.
                     // This particular position is "too good" for us, and will therefore never be played
                     // by a minmaxing opponent anyway, so further search can be pruned. This score is
                     // now a LowerBound score: there could be even higher scores in the other moves.
-                    debug_assert!(!best_score.is_upperbound(), "UpperBound scores should not cause beta termination"); // TODO: Is this correct?
+                    debug_assert!(!best_score.is_upperbound(), "UpperBound scores should not cause beta termination");
                     // println!("beta bailing: {best_score:?} > {beta:?}");
                     best_score = LowerBound(best_score.unwrap());
                     break;
@@ -204,18 +207,23 @@ impl<'a> Searcher<'a>
                 depth = Depth::MAX;
             }
 
+            // Finally store the new result in the hash table
+            let store_depth = if deficient_search || self.should_stop_search() {
+                // Deficient search only counts as one depth level lower
+                depth - 1
+            } else if best_score.is_exact() && best_score.unwrap().is_mate_score() {
+                // This evaluation is valid for any depth for purposes of hashtable lookup.
+                Depth::MAX
+            } else {
+                depth
+            };
             if best_score.unwrap() != BoardScore::NO_SCORE
             {
                 let hash_entry = HashEntry::with_contents(
                     position.get_hash(),
                     best_move,
                     best_score,
-                    if best_score.is_exact() && best_score.unwrap().is_mate_score() {
-                        // This evaluation is valid for any depth for purposes of hashtable lookup.
-                        Depth::MAX
-                    } else {
-                        depth
-                    }
+                    store_depth,
                 );
 
                 // println!("info string returning {best_score} at depth = {depth}");
@@ -224,10 +232,21 @@ impl<'a> Searcher<'a>
 
             best_score
         }
-        else
+
+        else if depth == 0 && !is_stopping
         {
             // Depth is zero, use leaf evaluation
             Exact(self.leaf_evaluation(position, alpha, beta))
+        }
+
+        else
+        {
+            // We are stopping the search. Unfortunately there was no hash entry to fall back to.
+            // We mustn't do leaf evaluation here, since that risks producing a worse result than what
+            // we already have achieved from previous searches. Instead return a noncommitting score,
+            // and let upper levels work out what to do.
+            debug_assert!(is_stopping);
+            LowerBound(BoardScore::WORST_SCORE)
         }
     }
 
